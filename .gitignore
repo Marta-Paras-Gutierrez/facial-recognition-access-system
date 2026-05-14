@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+.idea/
+.vscode/
+.DS_Store
+# Trained models
+modeloReconocido-EigenFace.xml
+modeloReconocido-FisherFace.xml
+# modeloReconocido-LBPHFace.xml
+assets/demo_1.JPG
