@@ -1,84 +1,190 @@
-# Librerías empleadas
-import cv2				# Utilizar OpenCV para reconocimiento de rostros
-import os				# Para crear, abrir o trabajar con directorios
-import numpy as np		# Para el cálculo numérico y el análisis de los datos
-import time				# Para insertar tiempos de espera
+"""
+=========================================================
+Facial Recognition System
+Module: recognition.py
 
-# Registro de personas que usaron el entrenamiento de reconocimiento
-carpetaDeTrabajo = 'G:/TFG/Programa/Archivos/Rostros'
-listaPersonal = os.listdir(carpetaDeTrabajo)
-print('Lista de personas: ', listaPersonal)
+Description:
+This module performs real-time facial recognition using
+the previously trained LBPH model.
+
+Workflow:
+1. Load the trained model.
+2. Load the labels file.
+3. Open the webcam.
+4. Detect faces.
+5. Predict the user's identity.
+6. Display the recognition result.
+=========================================================
+"""
+
+# =============================================================================
+# IMPORT LIBRARIES
+# =============================================================================
+
+import cv2                          # OpenCV library for computer vision
+
+# Import configuration constants
+from config import (
+    CAMERA_INDEX,
+    SCALE_FACTOR,
+    MIN_NEIGHBORS,
+    IMAGE_WIDTH,
+    IMAGE_HEIGHT,
+    LBPH_THRESHOLD,
+    WINDOW_RECOGNITION
+)
+
+# Import utility functions
+from utils import (
+    print_title,
+    load_face_detector,
+    load_model,
+    load_labels
+)
+
+# =============================================================================
+# FUNCTION: start_recognition()
+# =============================================================================
 
 
-# Escoger que método se va a usar para el reconocimiento
-metodo = int(input("¿Qué método quieres usar? 1-Eigen   2-Fisher   3-LBPH\n"))
-valor_deteccion = 0
-print("Método elegido = ", metodo)
+def start_recognition():
 
-# Leyendo el modelo --> Leer el archivo con el mismo nombre que el modelo de los rostros
-if metodo == 1:
-	reconocimiento_facial = cv2.face.EigenFaceRecognizer_create()
-	reconocimiento_facial.read('modeloReconocido-EigenFace.xml')
-	valor_deteccion = 5500			# Vídeos grabados 2500 y cámara 5500
-	print("Empleando el método 1-Eigen")
+    print("\n========================================")
+    print(" Real-Time Facial Recognition")
+    print("========================================")
 
-elif metodo == 2:
-	reconocimiento_facial = cv2.face.FisherFaceRecognizer_create()
-	reconocimiento_facial.read('modeloReconocido-FisherFace.xml')
-	valor_deteccion = 5				# Vídeos grabados 3 y cámara 10
-	print("Empleando el método 2-Fisher")
+	# -------------------------------------------------------------------------
+    # Load required components
+    # -------------------------------------------------------------------------
 
-elif metodo == 3:
-	reconocimiento_facial = cv2.face.LBPHFaceRecognizer_create()
-	reconocimiento_facial.read('modeloReconocido-LBPHFace.xml')
-	valor_deteccion = 65			# Vídeos grabados 50 y cámara 70
-	print("Empleando el método 3-LBPH")
+    try:
+        face_detector = load_face_detector()
+        recognizer = load_model()
+        labels = load_labels()
 
-else: print("Error")
+    except Exception as e:
+        print(f"\n[ERROR] {e}\n")
+        return
 
-# Usar vídeos para ver si hace bien el reconocimiento
-#capturando = cv2.VideoCapture('G:/TFG/Programa/Archivos/Marta.mp4')
-capturando = cv2.VideoCapture(0, cv2.CAP_DSHOW)	# Usar la cámara del ordenador
-#capturando = cv2.VideoCapture(url)		# Usar la cámara integrada del ESP32
+    # -------------------------------------------------------------------------
+    # Open webcam
+    # -------------------------------------------------------------------------
 
-faceClassif = cv2.CascadeClassifier('Encuadre_de_las_caras.xml')
+    camera = cv2.VideoCapture(CAMERA_INDEX)
 
-while True:
-	ret,frame = capturando.read()
-	if ret == False: 
-		break
-	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-	recuadroAuxiliar = gray.copy()
+    if not camera.isOpened():
 
-	faces = faceClassif.detectMultiScale(gray, 1.3, 5)
+        print("\n[ERROR] Unable to open webcam.\n")
+        return
 
-	for (x,y,w,h) in faces:
-		cv2.rectangle(frame, (x,y),(x+w,y+h),(0,255,0),2)
-		rostro = recuadroAuxiliar[y:y+h, x:x+w]
-        # Usar la misma escala que en el reconocedor de rostros
-		rostro = cv2.resize(rostro,(150,150), interpolation=cv2.INTER_CUBIC)
+    print("\nRecognition started.")
+    print("Press ESC to exit.\n")
 
-        # Predecir una etiqueta y la distancia para una imagen de entrada determinada
-		resultado = reconocimiento_facial.predict(rostro)
-        # Visualizar los dos valores obtenidos
-		cv2.putText(frame, '{}'.format(resultado), (x, y-5), 1, 1.3, (255,255,0), 1, cv2.LINE_AA)
-		
-        # Indicar de quien es el rostro según el entrenamiento
-		if resultado[1] < valor_deteccion:  # Valores cercanos a 0 son los que son reconocidos
-			cv2.putText(frame, '{}'.format(listaPersonal[resultado[0]]), (x, y-30), 2, 1.1, (203,192,203), 1, cv2.LINE_AA)
-			cv2.rectangle(frame, (x,y),(x+w,y+h),(0,255,0),2)
-			print("\033[32mRostro detectado {}\033[0m".format(listaPersonal[resultado[0]]))
+    # -------------------------------------------------------------------------
+    # Recognition loop
+    # -------------------------------------------------------------------------
 
-		else:
-			cv2.putText(frame, 'Desconocido', (x, y-30), 2, 0.8, (0,0,255), 1, cv2.LINE_AA)
-			cv2.rectangle(frame, (x,y),(x+w,y+h),(0,255,255),2)
-			print("\033[31mPersona desconocida\033[0m")
+    while True:
 
-	cv2.imshow('Ventana de visualizacion',frame)
-	
-	k = cv2.waitKey(1)
-	if k == 27:		# Establecer como cerrar el vídeo, tecla esc
-		break
+        ret, frame = camera.read()
 
-capturando.release()
-cv2.destroyAllWindows()
+        if not ret:
+            break
+
+        frame = cv2.flip(frame, 1)
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+        faces = face_detector.detectMultiScale(
+            gray,
+            scaleFactor=SCALE_FACTOR,
+            minNeighbors=MIN_NEIGHBORS
+        )
+
+        for (x, y, w, h) in faces:
+
+            face = gray[y:y+h, x:x+w]
+
+            face = cv2.resize(
+                face,
+                (IMAGE_WIDTH, IMAGE_HEIGHT),
+                interpolation=cv2.INTER_CUBIC
+            )
+
+            label, confidence = recognizer.predict(face)
+
+            if confidence < LBPH_THRESHOLD:
+                person = labels.get(label, "Unknown")
+                color = (0, 255, 0)
+                status = "Recognized"
+
+            else:
+                person = "Unknown"
+                color = (0, 0, 255)
+                status = "Unknown"
+
+            # Draw face rectangle
+            cv2.rectangle(
+                frame,
+                (x, y),
+                (x + w, y + h),
+                color,
+                2
+            )
+
+            # User name
+            cv2.putText(
+                frame,
+                person,
+                (x, y - 30),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.8,
+                color,
+                2
+            )
+
+            # Confidence
+            cv2.putText(
+                frame,
+                f"Confidence: {confidence:.2f}",
+                (x, y - 10),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                color,
+                2
+            )
+
+			# Console output
+            print(
+                f"Status: {status:11} | "
+                f"User: {person:15} | "
+                f"Confidence: {confidence:.2f}",
+                end="\r"
+            )
+
+        cv2.imshow(WINDOW_RECOGNITION, frame)
+
+        key = cv2.waitKey(1)
+
+        if key == 27:
+            break
+
+    # -------------------------------------------------------------------------
+    # Release resources
+    # -------------------------------------------------------------------------
+
+    camera.release()
+    cv2.destroyAllWindows()
+
+    print("\n")
+    print("========================================")
+    print(" Recognition finished")
+    print("========================================\n")
+
+
+# =============================================================================
+# TEST MODULE
+# =============================================================================
+
+if __name__ == "__main__":
+    start_recognition()
