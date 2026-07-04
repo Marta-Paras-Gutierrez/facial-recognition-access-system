@@ -45,13 +45,13 @@ data/dataset/*
 # =============================================================================
 
 # Ignore generated models
-data/models/*.xml
+#data/models/*.xml
 
 # Ignore generated labels
-data/models/labels.txt
+#data/models/labels.txt
 
 # Keep folder structure
-!data/models/.gitkeep
+#!data/models/.gitkeep
 
 # =============================================================================
 # Assets
