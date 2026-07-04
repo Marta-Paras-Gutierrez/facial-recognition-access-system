@@ -52,3 +52,10 @@ data/models/labels.txt
 
 # Keep folder structure
 !data/models/.gitkeep
+
+# =============================================================================
+# Assets
+# =============================================================================
+
+# Keep assets folder
+!assets/.gitkeep
